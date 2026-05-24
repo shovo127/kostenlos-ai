@@ -35,11 +35,22 @@ export default function Login() {
     <div className="min-h-screen bg-gray-950 flex items-center justify-center p-4">
       <div className="bg-gray-900 rounded-2xl p-8 w-full max-w-md border border-gray-800 shadow-2xl">
         <div className="text-center mb-8">
-          <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
-            <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
-              <path d="M16 4C16 4 8 8 8 16C8 20 10 23 13 25L16 28L19 25C22 23 24 20 24 16C24 8 16 4 16 4Z" fill="white" opacity="0.9"/>
-              <circle cx="16" cy="16" r="3" fill="white"/>
-              <path d="M16 4L18 10L16 9L14 10Z" fill="white" opacity="0.6"/>
+          <div className="w-16 h-16 mx-auto mb-4">
+            <svg width="64" height="64" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <defs>
+                <linearGradient id="grad" x1="0" y1="0" x2="40" y2="40" gradientUnits="userSpaceOnUse">
+                  <stop offset="0%" stopColor="#3B82F6"/>
+                  <stop offset="100%" stopColor="#8B5CF6"/>
+                </linearGradient>
+              </defs>
+              <rect width="40" height="40" rx="12" fill="url(#grad)"/>
+              <circle cx="20" cy="15" r="5" fill="white"/>
+              <circle cx="11" cy="26" r="3.5" fill="white" opacity="0.9"/>
+              <circle cx="20" cy="29" r="3.5" fill="white" opacity="0.9"/>
+              <circle cx="29" cy="26" r="3.5" fill="white" opacity="0.9"/>
+              <line x1="20" y1="20" x2="11" y2="26" stroke="white" strokeWidth="1.5" opacity="0.6"/>
+              <line x1="20" y1="20" x2="20" y2="29" stroke="white" strokeWidth="1.5" opacity="0.6"/>
+              <line x1="20" y1="20" x2="29" y2="26" stroke="white" strokeWidth="1.5" opacity="0.6"/>
             </svg>
           </div>
           <h1 className="text-3xl font-bold text-white">Kostenlos AI</h1>
