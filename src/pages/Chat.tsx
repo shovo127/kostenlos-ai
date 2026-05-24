@@ -1,16 +1,19 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { ArrowUp, LogOut, Paperclip, Plus, Settings as SettingsIcon } from "lucide-react";
 import { ID, Permission, Query, Role } from "appwrite";
+import BrandLogo from "../components/BrandLogo";
 import { useAuth } from "../contexts/AuthContext";
 import { signOut } from "../lib/auth";
 import { databases, DATABASE_ID, CHATS_ID, CONVERSATIONS_ID, KEYS_ID } from "../lib/appwrite";
-import { getAIResponse, UserKeys } from "../lib/aiService";
+import { ChatHistoryItem, getAIResponse, UserKeys } from "../lib/aiService";
 
 interface Message {
   id: string;
   text: string;
   isUser: boolean;
   aiUsed?: string;
+  webSearchUsed?: boolean;
 }
 
 interface Conversation {
@@ -27,6 +30,12 @@ const emptyKeys: UserKeys = {
   tavilyKey: ""
 };
 
+const examplePrompts = [
+  "Compare Groq, Gemini, OpenAI, and Mistral for a startup chatbot.",
+  "Write a polished product launch email for Kostenlos AI.",
+  "Explain this week's AI news using web search context."
+];
+
 function hasAiProviderKey(keys: UserKeys | null) {
   return Boolean(keys?.groqKey || keys?.geminiKey || keys?.openaiKey || keys?.mistralKey);
 }
@@ -34,9 +43,32 @@ function hasAiProviderKey(keys: UserKeys | null) {
 function documentPermissions(userId: string) {
   return [
     Permission.read(Role.user(userId)),
-    Permission.update(Role.user(userId)),
-    Permission.delete(Role.user(userId))
+    Permission.write(Role.user(userId))
   ];
+}
+
+function relativeTime(value: string) {
+  const time = new Date(value).getTime();
+  if (Number.isNaN(time)) return "";
+
+  const diff = Date.now() - time;
+  const minute = 60 * 1000;
+  const hour = 60 * minute;
+  const day = 24 * hour;
+
+  if (diff < minute) return "now";
+  if (diff < hour) return `${Math.floor(diff / minute)}m ago`;
+  if (diff < day) return `${Math.floor(diff / hour)}h ago`;
+  if (diff < 7 * day) return `${Math.floor(diff / day)}d ago`;
+
+  return new Date(value).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+function toHistory(messages: Message[]): ChatHistoryItem[] {
+  return messages.slice(-10).map(message => ({
+    text: message.text,
+    isUser: message.isUser
+  }));
 }
 
 export default function Chat() {
@@ -53,6 +85,7 @@ export default function Chat() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const hasKeys = useMemo(() => hasAiProviderKey(userKeys), [userKeys]);
+  const remainingCharacters = 8000 - input.length;
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -148,11 +181,11 @@ export default function Chat() {
     }
   }, [user]);
 
-  function startNewConversation() {
+  function startNewConversation(prompt = "") {
     setMessages([]);
     setCurrentConvId(null);
     setStatusMessage("");
-    setInput("");
+    setInput(prompt);
   }
 
   async function handleSignOut() {
@@ -165,14 +198,15 @@ export default function Chat() {
   }
 
   async function sendMessage() {
-    if (!user || !input.trim() || loading) return;
+    if (!user || !input.trim() || loading || remainingCharacters < 0) return;
 
     if (!hasKeys || !userKeys) {
-      setStatusMessage("Add at least one AI provider key in Settings before chatting.");
+      setStatusMessage("Add your API keys in Settings to start chatting. It's free!");
       return;
     }
 
     const userMessage = input.trim();
+    const history = toHistory(messages);
     const optimisticUserMessage: Message = {
       id: `local_${Date.now()}`,
       text: userMessage,
@@ -185,12 +219,13 @@ export default function Chat() {
     setMessages(prev => [...prev, optimisticUserMessage]);
 
     try {
-      const aiResponse = await getAIResponse(userMessage, userKeys);
+      const aiResponse = await getAIResponse(userMessage, userKeys, history);
       const aiMessage: Message = {
         id: `local_${Date.now() + 1}`,
         text: aiResponse.text,
         isUser: false,
-        aiUsed: aiResponse.aiUsed
+        aiUsed: aiResponse.aiUsed,
+        webSearchUsed: aiResponse.webSearchUsed
       };
 
       setMessages(prev => [...prev, aiMessage]);
@@ -251,18 +286,22 @@ export default function Chat() {
 
   return (
     <div className="flex min-h-screen bg-gray-950 text-gray-100">
-      <aside className="hidden md:flex w-72 bg-gray-900 border-r border-gray-800 flex-col">
-        <div className="p-4 border-b border-gray-800">
-          <h1 className="text-white font-bold text-lg">Kostenlos AI</h1>
-          <p className="text-gray-500 text-xs">Multi-AI Assistant</p>
+      <aside className="hidden md:flex w-80 bg-gray-900 border-r border-gray-800 flex-col">
+        <div className="p-4 border-b border-gray-800 flex items-center gap-3">
+          <BrandLogo size="sm" />
+          <div>
+            <h1 className="text-white font-bold text-lg">Kostenlos AI</h1>
+            <p className="text-gray-500 text-xs">Your Free Multi-AI Assistant</p>
+          </div>
         </div>
 
         <div className="p-3">
           <button
             type="button"
-            onClick={startNewConversation}
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white rounded-lg py-2 text-sm font-medium transition"
+            onClick={() => startNewConversation()}
+            className="w-full bg-blue-600 hover:bg-blue-700 text-white rounded-xl py-3 text-sm font-semibold transition flex items-center justify-center gap-2"
           >
+            <Plus size={17} />
             New Chat
           </button>
         </div>
@@ -274,36 +313,45 @@ export default function Chat() {
               type="button"
               onClick={() => loadConversationMessages(conv.id)}
               className={
-                "w-full text-left p-2 rounded-lg text-sm mb-1 transition truncate " +
-                (currentConvId === conv.id ? "bg-gray-700 text-white" : "text-gray-400 hover:bg-gray-800")
+                "w-full text-left p-3 rounded-xl text-sm mb-1 transition " +
+                (currentConvId === conv.id ? "bg-gray-800 text-white border border-gray-700" : "text-gray-400 hover:bg-gray-800/70")
               }
               title={conv.title}
             >
-              {conv.title}
+              <span className="block truncate font-medium">{conv.title}</span>
+              <span className="text-xs text-gray-500">{relativeTime(conv.lastUpdated)}</span>
             </button>
           ))}
         </div>
 
-        <div className="p-3 border-t border-gray-800 space-y-2">
-          <Link to="/settings" className="block w-full text-center bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-lg py-2 text-sm transition">
-            Settings / API Keys
-          </Link>
-          <button
-            type="button"
-            onClick={handleSignOut}
-            className="w-full text-center text-gray-400 hover:text-white rounded-lg py-2 text-sm transition"
-          >
-            Sign Out
-          </button>
+        <div className="p-3 border-t border-gray-800 space-y-3">
+          <p className="truncate text-xs text-gray-500">{user?.email}</p>
+          <div className="grid grid-cols-2 gap-2">
+            <Link to="/settings" className="flex items-center justify-center gap-2 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-lg py-2 text-sm transition">
+              <SettingsIcon size={15} />
+              Settings
+            </Link>
+            <button
+              type="button"
+              onClick={handleSignOut}
+              className="flex items-center justify-center gap-2 text-gray-400 hover:text-white bg-gray-950 hover:bg-gray-800 rounded-lg py-2 text-sm transition"
+            >
+              <LogOut size={15} />
+              Logout
+            </button>
+          </div>
         </div>
       </aside>
 
       <main className="flex-1 flex flex-col min-w-0">
         <div className="md:hidden border-b border-gray-800 bg-gray-900 p-3 flex items-center justify-between gap-3">
-          <button type="button" onClick={startNewConversation} className="text-sm text-blue-300">
+          <button type="button" onClick={() => startNewConversation()} className="text-sm text-blue-300">
             New
           </button>
-          <h1 className="text-white font-semibold truncate">Kostenlos AI</h1>
+          <div className="flex items-center gap-2 min-w-0">
+            <BrandLogo size="sm" />
+            <h1 className="text-white font-semibold truncate">Kostenlos AI</h1>
+          </div>
           <Link to="/settings" className="text-sm text-blue-300">
             Keys
           </Link>
@@ -311,8 +359,8 @@ export default function Chat() {
 
         {!hasKeys && (
           <div className="bg-yellow-950 border-b border-yellow-800 px-4 py-3 text-center">
-            <p className="text-yellow-200 text-sm">
-              Add at least one AI key in <Link to="/settings" className="underline font-semibold">Settings</Link> to start chatting.
+            <p className="text-yellow-100 text-sm">
+              ⚠️ Add your API keys in <Link to="/settings" className="underline font-semibold">Settings</Link> to start chatting. It's free!
             </p>
           </div>
         )}
@@ -326,9 +374,24 @@ export default function Chat() {
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4">
           {messages.length === 0 && !loadingHistory && (
             <div className="flex items-center justify-center min-h-full">
-              <div className="text-center max-w-md">
-                <h2 className="text-2xl font-bold text-white mb-2">Welcome to Kostenlos AI</h2>
-                <p className="text-gray-400">Bring your own API keys and chat with automatic provider failover.</p>
+              <div className="text-center max-w-2xl animate-[fadeIn_420ms_ease-out]">
+                <div className="flex justify-center mb-5">
+                  <BrandLogo size="lg" />
+                </div>
+                <h2 className="text-3xl font-bold text-white mb-3">How can I help today?</h2>
+                <p className="text-gray-400 mb-6">Bring your own free API keys. Kostenlos AI keeps the same conversation alive even when it switches providers.</p>
+                <div className="grid gap-3 sm:grid-cols-3">
+                  {examplePrompts.map(prompt => (
+                    <button
+                      key={prompt}
+                      type="button"
+                      onClick={() => setInput(prompt)}
+                      className="rounded-xl border border-gray-800 bg-gray-900 p-4 text-left text-sm text-gray-300 hover:border-blue-700 hover:bg-gray-800 transition"
+                    >
+                      {prompt}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
           )}
@@ -336,10 +399,21 @@ export default function Chat() {
           {loadingHistory && <p className="text-center text-gray-500 text-sm">Loading conversation...</p>}
 
           {messages.map(msg => (
-            <div key={msg.id} className={"flex " + (msg.isUser ? "justify-end" : "justify-start")}>
-              <div className={"max-w-[min(42rem,85vw)] rounded-2xl px-4 py-3 " + (msg.isUser ? "bg-blue-600 text-white" : "bg-gray-800 text-gray-100")}>
-                {!msg.isUser && msg.aiUsed && msg.aiUsed !== "none" && (
-                  <p className="text-xs text-gray-400 mb-1">via {msg.aiUsed}</p>
+            <div key={msg.id} className={"flex animate-[fadeIn_260ms_ease-out] " + (msg.isUser ? "justify-end" : "justify-start")}>
+              <div className={"max-w-[min(44rem,86vw)] rounded-2xl px-4 py-3 shadow-lg shadow-black/10 " + (msg.isUser ? "bg-blue-600 text-white" : "bg-gray-800 text-gray-100 border border-gray-700/70")}>
+                {!msg.isUser && (
+                  <div className="mb-2 flex flex-wrap gap-2">
+                    {msg.aiUsed && msg.aiUsed !== "none" && (
+                      <span className="rounded-full border border-emerald-700/60 bg-emerald-950/60 px-2 py-0.5 text-xs text-emerald-300">
+                        via {msg.aiUsed}
+                      </span>
+                    )}
+                    {msg.webSearchUsed && (
+                      <span className="rounded-full border border-blue-700/60 bg-blue-950/60 px-2 py-0.5 text-xs text-blue-200">
+                        🔍 Web search used
+                      </span>
+                    )}
+                  </div>
                 )}
                 <p className="whitespace-pre-wrap break-words leading-relaxed">{msg.text}</p>
               </div>
@@ -347,12 +421,12 @@ export default function Chat() {
           ))}
 
           {loading && (
-            <div className="flex justify-start">
-              <div className="bg-gray-800 rounded-2xl px-4 py-3">
+            <div className="flex justify-start animate-[fadeIn_260ms_ease-out]">
+              <div className="bg-gray-800 border border-gray-700 rounded-2xl px-4 py-3">
                 <div className="flex space-x-1">
-                  <div className="w-2 h-2 bg-gray-500 rounded-full animate-bounce"></div>
-                  <div className="w-2 h-2 bg-gray-500 rounded-full animate-bounce [animation-delay:0.1s]"></div>
-                  <div className="w-2 h-2 bg-gray-500 rounded-full animate-bounce [animation-delay:0.2s]"></div>
+                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
+                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce [animation-delay:0.1s]"></div>
+                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce [animation-delay:0.2s]"></div>
                 </div>
               </div>
             </div>
@@ -362,29 +436,45 @@ export default function Chat() {
         </div>
 
         <div className="p-3 sm:p-4 border-t border-gray-800 bg-gray-950">
-          <div className="flex gap-3">
-            <textarea
-              value={input}
-              onChange={e => setInput(e.target.value)}
-              onKeyDown={e => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  sendMessage();
-                }
-              }}
-              placeholder="Ask anything..."
-              rows={1}
-              disabled={loading}
-              className="flex-1 resize-none bg-gray-800 text-white rounded-xl px-4 py-3 border border-gray-700 focus:outline-none focus:border-blue-500 disabled:opacity-60"
-            />
-            <button
-              type="button"
-              onClick={sendMessage}
-              disabled={loading || !input.trim()}
-              className="bg-blue-600 hover:bg-blue-700 text-white rounded-xl px-5 sm:px-6 py-3 font-semibold transition disabled:opacity-50"
-            >
-              Send
-            </button>
+          <div className="rounded-2xl border border-gray-800 bg-gray-900 p-2 shadow-2xl shadow-black/20">
+            <div className="flex gap-2">
+              <button
+                type="button"
+                className="h-11 w-11 shrink-0 rounded-xl text-gray-500 hover:text-gray-300 hover:bg-gray-800 transition"
+                aria-label="Attach file"
+                title="File upload coming soon"
+              >
+                <Paperclip size={19} className="mx-auto" />
+              </button>
+              <textarea
+                value={input}
+                onChange={e => setInput(e.target.value.slice(0, 8000))}
+                onKeyDown={e => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    sendMessage();
+                  }
+                }}
+                placeholder="Ask anything..."
+                rows={1}
+                disabled={loading}
+                className="min-h-11 max-h-36 flex-1 resize-none bg-transparent text-white px-2 py-2.5 focus:outline-none disabled:opacity-60"
+              />
+              <button
+                type="button"
+                onClick={sendMessage}
+                disabled={loading || !input.trim() || remainingCharacters < 0}
+                className="h-11 w-11 shrink-0 rounded-xl bg-blue-600 text-white hover:bg-blue-700 transition disabled:opacity-50"
+                aria-label="Send message"
+              >
+                <ArrowUp size={20} className="mx-auto" />
+              </button>
+            </div>
+            <div className="flex justify-end px-2 pb-1">
+              <span className={`text-xs ${remainingCharacters < 0 ? "text-red-300" : "text-gray-500"}`}>
+                {input.length}/8000
+              </span>
+            </div>
           </div>
         </div>
       </main>

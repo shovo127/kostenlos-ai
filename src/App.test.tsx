@@ -19,5 +19,6 @@ test("renders the login screen", () => {
   render(<Login />);
 
   expect(screen.getByText("Kostenlos AI")).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: /sign in/i })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Show password" })).toBeInTheDocument();
+  expect(screen.getByText("Your Free Multi-AI Assistant")).toBeInTheDocument();
 });
