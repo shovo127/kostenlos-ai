@@ -1,14 +1,14 @@
-import { Account, Client, Databases } from "appwrite";
+import { Client, Account, Databases } from "appwrite";
 
 const client = new Client();
 
 client
-  .setEndpoint(process.env.REACT_APP_APPWRITE_ENDPOINT || "https://cloud.appwrite.io/v1")
-  .setProject(process.env.REACT_APP_APPWRITE_PROJECT_ID || "");
+  .setEndpoint("https://cloud.appwrite.io/v1")
+  .setProject("6a11cdf800349b89e378");
 
 export const account = new Account(client);
 export const databases = new Databases(client);
-export const DATABASE_ID = process.env.REACT_APP_APPWRITE_DATABASE_ID || "";
-export const CHATS_ID = process.env.REACT_APP_APPWRITE_CHATS_ID || "";
-export const KEYS_ID = process.env.REACT_APP_APPWRITE_KEYS_ID || "";
-export const CONVERSATIONS_ID = process.env.REACT_APP_APPWRITE_CONVERSATIONS_ID || "";
+export const DATABASE_ID = "6a11ce3300221a2c360f";
+export const CHATS_ID = "chats";
+export const KEYS_ID = "user_keys";
+export const CONVERSATIONS_ID = "conversations";
