@@ -24,6 +24,13 @@ export default function Login() {
       }
       const { getCurrentUser } = await import("../lib/auth");
       const user = await getCurrentUser();
+      if (isSignUp) {
+        setError("");
+        setLoading(false);
+        alert("Account created! Please check your email to verify your account, then sign in.");
+        setIsSignUp(false);
+        return;
+      }
       setUser(user);
     } catch (err: any) {
       setError(err.message || "Something went wrong");
