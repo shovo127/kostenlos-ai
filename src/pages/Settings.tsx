@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { ArrowLeft, Check, Eye, EyeOff, Loader2 } from "lucide-react";
 import { ID, Permission, Query, Role } from "appwrite";
-import BrandLogo from "../components/BrandLogo";
+import Logo from "../components/Logo";
 import { databases, DATABASE_ID, KEYS_ID } from "../lib/appwrite";
 import { useAuth } from "../contexts/AuthContext";
 
@@ -12,6 +12,9 @@ type UserKeys = {
   openaiKey: string;
   mistralKey: string;
   tavilyKey: string;
+  perplexityKey: string;
+  togetherKey: string;
+  cohereKey: string;
 };
 
 type KeyField = {
@@ -22,6 +25,7 @@ type KeyField = {
   linkText: string;
   freeTier: string;
   color: string;
+  section: "AI Providers" | "Web Search";
 };
 
 const emptyKeys: UserKeys = {
@@ -29,7 +33,10 @@ const emptyKeys: UserKeys = {
   geminiKey: "",
   openaiKey: "",
   mistralKey: "",
-  tavilyKey: ""
+  tavilyKey: "",
+  perplexityKey: "",
+  togetherKey: "",
+  cohereKey: ""
 };
 
 function documentPermissions(userId: string) {
@@ -56,7 +63,8 @@ export default function Settings() {
       url: "https://console.groq.com",
       linkText: "Get free at console.groq.com",
       freeTier: "Free: 14,400 requests/day",
-      color: "bg-emerald-400"
+      color: "bg-emerald-400",
+      section: "AI Providers"
     },
     {
       key: "geminiKey",
@@ -65,7 +73,38 @@ export default function Settings() {
       url: "https://aistudio.google.com",
       linkText: "Get free at aistudio.google.com",
       freeTier: "Free: 1,500 requests/day",
-      color: "bg-blue-400"
+      color: "bg-blue-400",
+      section: "AI Providers"
+    },
+    {
+      key: "perplexityKey",
+      label: "Perplexity API Key",
+      placeholder: "pplx-...",
+      url: "https://www.perplexity.ai/settings/api",
+      linkText: "Get free key at perplexity.ai",
+      freeTier: "Free tier available",
+      color: "bg-indigo-400",
+      section: "AI Providers"
+    },
+    {
+      key: "togetherKey",
+      label: "Together AI Key",
+      placeholder: "...",
+      url: "https://api.together.xyz",
+      linkText: "Get key at api.together.xyz",
+      freeTier: "$1 free credit",
+      color: "bg-purple-400",
+      section: "AI Providers"
+    },
+    {
+      key: "cohereKey",
+      label: "Cohere API Key",
+      placeholder: "...",
+      url: "https://dashboard.cohere.com",
+      linkText: "Get free key at dashboard.cohere.ai",
+      freeTier: "Free tier: 1000 calls/month",
+      color: "bg-pink-400",
+      section: "AI Providers"
     },
     {
       key: "openaiKey",
@@ -74,7 +113,8 @@ export default function Settings() {
       url: "https://platform.openai.com",
       linkText: "Get at platform.openai.com",
       freeTier: "Pay per use",
-      color: "bg-slate-300"
+      color: "bg-slate-300",
+      section: "AI Providers"
     },
     {
       key: "mistralKey",
@@ -83,7 +123,8 @@ export default function Settings() {
       url: "https://console.mistral.ai",
       linkText: "Get free at console.mistral.ai",
       freeTier: "Free tier available",
-      color: "bg-orange-300"
+      color: "bg-orange-300",
+      section: "AI Providers"
     },
     {
       key: "tavilyKey",
@@ -92,9 +133,13 @@ export default function Settings() {
       url: "https://tavily.com",
       linkText: "Get free at tavily.com",
       freeTier: "Free: 1,000 searches/month",
-      color: "bg-cyan-300"
+      color: "bg-cyan-300",
+      section: "Web Search"
     }
   ], []);
+
+  const aiFields = fields.filter(field => field.section === "AI Providers");
+  const searchFields = fields.filter(field => field.section === "Web Search");
 
   const loadKeys = useCallback(async () => {
     if (!user) return;
@@ -115,7 +160,10 @@ export default function Settings() {
           geminiKey: doc.geminiKey || "",
           openaiKey: doc.openaiKey || "",
           mistralKey: doc.mistralKey || "",
-          tavilyKey: doc.tavilyKey || ""
+          tavilyKey: doc.tavilyKey || "",
+          perplexityKey: doc.perplexityKey || "",
+          togetherKey: doc.togetherKey || "",
+          cohereKey: doc.cohereKey || ""
         });
       } else {
         setDocId(null);
@@ -147,12 +195,18 @@ export default function Settings() {
       geminiKey: keys.geminiKey.trim(),
       openaiKey: keys.openaiKey.trim(),
       mistralKey: keys.mistralKey.trim(),
-      tavilyKey: keys.tavilyKey.trim()
+      tavilyKey: keys.tavilyKey.trim(),
+      perplexityKey: keys.perplexityKey.trim(),
+      togetherKey: keys.togetherKey.trim(),
+      cohereKey: keys.cohereKey.trim()
     };
 
     const hasAiKey = Boolean(
       trimmedKeys.groqKey ||
       trimmedKeys.geminiKey ||
+      trimmedKeys.perplexityKey ||
+      trimmedKeys.togetherKey ||
+      trimmedKeys.cohereKey ||
       trimmedKeys.openaiKey ||
       trimmedKeys.mistralKey
     );
@@ -201,7 +255,7 @@ export default function Settings() {
         </Link>
 
         <div className="flex items-start gap-4 mb-8">
-          <BrandLogo size="md" />
+          <Logo size={48} />
           <div>
             <h1 className="text-3xl font-bold text-white mb-2">API Keys & Settings</h1>
             <p className="text-gray-400 max-w-2xl leading-6">
@@ -213,56 +267,64 @@ export default function Settings() {
 
         {loadingKeys && <p className="text-gray-400 mb-4">Loading saved keys...</p>}
 
-        <div className="grid gap-4">
-          {fields.map(field => {
-            const saved = Boolean(keys[field.key]);
-            const visible = Boolean(visibleFields[field.key]);
+        {[
+          { title: "AI Providers", items: aiFields },
+          { title: "Web Search", items: searchFields }
+        ].map(section => (
+          <div key={section.title} className="mb-6">
+            <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500">{section.title}</h2>
+            <div className="grid gap-4">
+              {section.items.map(field => {
+                const saved = Boolean(keys[field.key]);
+                const visible = Boolean(visibleFields[field.key]);
 
-            return (
-              <section key={field.key} className="rounded-2xl border border-gray-800 bg-gray-900 p-4 shadow-xl shadow-black/10">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                  <div className="flex items-start gap-3">
-                    <span className={`mt-1 h-3 w-3 rounded-full ${field.color}`} />
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <h2 className="font-semibold text-white">{field.label}</h2>
-                        {saved && (
-                          <span className="inline-flex items-center gap-1 rounded-full border border-emerald-700/60 bg-emerald-950/60 px-2 py-0.5 text-xs text-emerald-300">
-                            <Check size={12} />
-                            Saved
-                          </span>
-                        )}
+                return (
+                  <section key={field.key} className="rounded-2xl border border-gray-800 bg-gray-900 p-4 shadow-xl shadow-black/10">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="flex items-start gap-3">
+                        <span className={`mt-1 h-3 w-3 rounded-full ${field.color}`} />
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h3 className="font-semibold text-white">{field.label}</h3>
+                            {saved && (
+                              <span className="inline-flex items-center gap-1 rounded-full border border-emerald-700/60 bg-emerald-950/60 px-2 py-0.5 text-xs text-emerald-300">
+                                <Check size={12} />
+                                Saved
+                              </span>
+                            )}
+                          </div>
+                          <a href={field.url} target="_blank" rel="noreferrer" className="text-sm text-blue-300 hover:text-blue-200 hover:underline">
+                            {field.linkText}
+                          </a>
+                          <p className="mt-1 text-sm text-gray-500">{field.freeTier}</p>
+                        </div>
                       </div>
-                      <a href={field.url} target="_blank" rel="noreferrer" className="text-sm text-blue-300 hover:text-blue-200 hover:underline">
-                        {field.linkText}
-                      </a>
-                      <p className="mt-1 text-sm text-gray-500">{field.freeTier}</p>
                     </div>
-                  </div>
-                </div>
 
-                <div className="relative mt-4">
-                  <input
-                    type={visible ? "text" : "password"}
-                    placeholder={field.placeholder}
-                    value={keys[field.key]}
-                    onChange={e => setKeys(prev => ({ ...prev, [field.key]: e.target.value }))}
-                    className="w-full bg-gray-800 text-white rounded-xl px-4 py-3 pr-12 border border-gray-700 focus:outline-none focus:border-blue-500 transition"
-                    autoComplete="off"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setVisibleFields(prev => ({ ...prev, [field.key]: !prev[field.key] }))}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white transition"
-                    aria-label={visible ? `Hide ${field.label}` : `Show ${field.label}`}
-                  >
-                    {visible ? <EyeOff size={18} /> : <Eye size={18} />}
-                  </button>
-                </div>
-              </section>
-            );
-          })}
-        </div>
+                    <div className="relative mt-4">
+                      <input
+                        type={visible ? "text" : "password"}
+                        placeholder={field.placeholder}
+                        value={keys[field.key]}
+                        onChange={e => setKeys(prev => ({ ...prev, [field.key]: e.target.value }))}
+                        className="w-full bg-gray-800 text-white rounded-xl px-4 py-3 pr-12 border border-gray-700 focus:outline-none focus:border-blue-500 transition"
+                        autoComplete="off"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setVisibleFields(prev => ({ ...prev, [field.key]: !prev[field.key] }))}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white transition"
+                        aria-label={visible ? `Hide ${field.label}` : `Show ${field.label}`}
+                      >
+                        {visible ? <EyeOff size={18} /> : <Eye size={18} />}
+                      </button>
+                    </div>
+                  </section>
+                );
+              })}
+            </div>
+          </div>
+        ))}
 
         <button
           type="button"

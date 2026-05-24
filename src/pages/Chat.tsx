@@ -1,13 +1,14 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { ArrowUp, Clipboard, Check, Code2, FileText, Lightbulb, LogOut, Paperclip, Plus, Search, Settings as SettingsIcon } from "lucide-react";
 import { ID, Permission, Query, Role } from "appwrite";
-import BrandLogo from "../components/BrandLogo";
+import Logo from "../components/Logo";
 import { useAuth } from "../contexts/AuthContext";
 import { signOut } from "../lib/auth";
 import { databases, DATABASE_ID, CHATS_ID, CONVERSATIONS_ID, KEYS_ID } from "../lib/appwrite";
-import { ChatHistoryItem, getAIResponse, UserKeys } from "../lib/aiService";
+import { ChatHistoryItem, generateConversationTitle, getAIResponse, UserKeys } from "../lib/aiService";
 
 interface Message {
   id: string;
@@ -29,7 +30,10 @@ const emptyKeys: UserKeys = {
   geminiKey: "",
   openaiKey: "",
   mistralKey: "",
-  tavilyKey: ""
+  tavilyKey: "",
+  perplexityKey: "",
+  togetherKey: "",
+  cohereKey: ""
 };
 
 const examplePrompts = [
@@ -40,7 +44,7 @@ const examplePrompts = [
 ];
 
 function hasAiProviderKey(keys: UserKeys | null) {
-  return Boolean(keys?.groqKey || keys?.geminiKey || keys?.openaiKey || keys?.mistralKey);
+  return Boolean(keys?.groqKey || keys?.geminiKey || keys?.perplexityKey || keys?.togetherKey || keys?.cohereKey || keys?.openaiKey || keys?.mistralKey);
 }
 
 function documentPermissions(userId: string) {
@@ -90,7 +94,7 @@ function truncateTitle(title: string) {
 }
 
 function toHistory(messages: Message[]): ChatHistoryItem[] {
-  return messages.slice(-10).map(message => ({
+  return messages.map(message => ({
     text: message.text,
     isUser: message.isUser
   }));
@@ -137,7 +141,10 @@ export default function Chat() {
         geminiKey: doc.geminiKey || "",
         openaiKey: doc.openaiKey || "",
         mistralKey: doc.mistralKey || "",
-        tavilyKey: doc.tavilyKey || ""
+        tavilyKey: doc.tavilyKey || "",
+        perplexityKey: doc.perplexityKey || "",
+        togetherKey: doc.togetherKey || "",
+        cohereKey: doc.cohereKey || ""
       });
     } catch {
       setUserKeys(emptyKeys);
@@ -287,6 +294,14 @@ export default function Chat() {
         );
         convId = conv.$id;
         setCurrentConvId(convId);
+        generateConversationTitle(userMessage, userKeys)
+          .then(async title => {
+            if (title) {
+              await databases.updateDocument(DATABASE_ID, CONVERSATIONS_ID, convId!, { title });
+              await loadConversations();
+            }
+          })
+          .catch(() => {});
       } else {
         await databases.updateDocument(DATABASE_ID, CONVERSATIONS_ID, convId, {
           lastUpdated: now
@@ -329,11 +344,7 @@ export default function Chat() {
     <div className="flex min-h-screen overflow-x-hidden bg-gray-950 text-gray-100">
       <aside className="hidden md:flex w-80 bg-gray-900 border-r border-gray-800 flex-col">
         <div className="p-4 border-b border-gray-800 flex items-center gap-3">
-          <BrandLogo size="sm" />
-          <div>
-            <h1 className="text-white font-bold text-lg">Kostenlos AI</h1>
-            <p className="text-gray-500 text-xs">Your Free Multi-AI Assistant</p>
-          </div>
+          <Logo size={36} showText />
         </div>
 
         <div className="p-3">
@@ -390,7 +401,7 @@ export default function Chat() {
             New
           </button>
           <div className="flex items-center gap-2 min-w-0">
-            <BrandLogo size="sm" />
+            <Logo size={32} />
             <h1 className="text-white font-semibold truncate">Kostenlos AI</h1>
           </div>
           <Link to="/settings" className="text-sm text-blue-300">
@@ -417,7 +428,7 @@ export default function Chat() {
             <div className="flex items-center justify-center min-h-full">
               <div className="text-center max-w-2xl animate-[fadeIn_420ms_ease-out]">
                 <div className="flex justify-center mb-5">
-                  <BrandLogo size="lg" />
+                  <Logo size={64} />
                 </div>
                 <h2 className="text-3xl font-bold text-white mb-3">Welcome to Kostenlos AI</h2>
                 <p className="text-gray-400 mb-6">Bring your own free API keys. Kostenlos AI keeps the same conversation alive even when it switches providers.</p>
@@ -477,6 +488,7 @@ export default function Chat() {
                   ) : (
                     <div className="markdown-body">
                       <ReactMarkdown
+                        remarkPlugins={[remarkGfm]}
                         components={{
                           code({ className, children, ...props }) {
                             const inline = !className;

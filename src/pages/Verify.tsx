@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import Logo from "../components/Logo";
 import { account } from "../lib/appwrite";
 
 export default function Verify() {
@@ -21,22 +22,7 @@ export default function Verify() {
     <div className="min-h-screen bg-gray-950 flex items-center justify-center p-4">
       <div className="bg-gray-900 rounded-2xl p-8 w-full max-w-md border border-gray-800 text-center">
         <div className="w-16 h-16 mx-auto mb-4">
-          <svg width="64" height="64" viewBox="0 0 40 40" fill="none">
-            <defs>
-              <linearGradient id="grad" x1="0" y1="0" x2="40" y2="40" gradientUnits="userSpaceOnUse">
-                <stop offset="0%" stopColor="#3B82F6"/>
-                <stop offset="100%" stopColor="#8B5CF6"/>
-              </linearGradient>
-            </defs>
-            <rect width="40" height="40" rx="12" fill="url(#grad)"/>
-            <circle cx="20" cy="15" r="5" fill="white"/>
-            <circle cx="11" cy="26" r="3.5" fill="white" opacity="0.9"/>
-            <circle cx="20" cy="29" r="3.5" fill="white" opacity="0.9"/>
-            <circle cx="29" cy="26" r="3.5" fill="white" opacity="0.9"/>
-            <line x1="20" y1="20" x2="11" y2="26" stroke="white" strokeWidth="1.5" opacity="0.6"/>
-            <line x1="20" y1="20" x2="20" y2="29" stroke="white" strokeWidth="1.5" opacity="0.6"/>
-            <line x1="20" y1="20" x2="29" y2="26" stroke="white" strokeWidth="1.5" opacity="0.6"/>
-          </svg>
+          <Logo size={64} />
         </div>
         <h1 className="text-2xl font-bold text-white mb-2">Kostenlos AI</h1>
         {status === "verifying" && (
