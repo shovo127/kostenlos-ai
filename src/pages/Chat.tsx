@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { ArrowUp, LogOut, Paperclip, Plus, Settings as SettingsIcon } from "lucide-react";
+import ReactMarkdown from "react-markdown";
+import { ArrowUp, Clipboard, Check, Code2, FileText, Lightbulb, LogOut, Paperclip, Plus, Search, Settings as SettingsIcon } from "lucide-react";
 import { ID, Permission, Query, Role } from "appwrite";
 import BrandLogo from "../components/BrandLogo";
 import { useAuth } from "../contexts/AuthContext";
@@ -14,6 +15,7 @@ interface Message {
   isUser: boolean;
   aiUsed?: string;
   webSearchUsed?: boolean;
+  timestamp?: string;
 }
 
 interface Conversation {
@@ -31,9 +33,10 @@ const emptyKeys: UserKeys = {
 };
 
 const examplePrompts = [
-  "Compare Groq, Gemini, OpenAI, and Mistral for a startup chatbot.",
-  "Write a polished product launch email for Kostenlos AI.",
-  "Explain this week's AI news using web search context."
+  { icon: Lightbulb, text: "Brainstorm 10 startup ideas using free AI tools." },
+  { icon: FileText, text: "Write a polished product launch email for Kostenlos AI." },
+  { icon: Code2, text: "Explain this TypeScript error and show the fixed code." },
+  { icon: Search, text: "Summarize the latest AI news using web search context." }
 ];
 
 function hasAiProviderKey(keys: UserKeys | null) {
@@ -57,11 +60,33 @@ function relativeTime(value: string) {
   const day = 24 * hour;
 
   if (diff < minute) return "now";
-  if (diff < hour) return `${Math.floor(diff / minute)}m ago`;
-  if (diff < day) return `${Math.floor(diff / hour)}h ago`;
-  if (diff < 7 * day) return `${Math.floor(diff / day)}d ago`;
+  if (diff < hour) {
+    const minutes = Math.floor(diff / minute);
+    return `${minutes} ${minutes === 1 ? "minute" : "minutes"} ago`;
+  }
+  if (diff < day) {
+    const hours = Math.floor(diff / hour);
+    return `${hours} ${hours === 1 ? "hour" : "hours"} ago`;
+  }
+  if (diff < 7 * day) {
+    const days = Math.floor(diff / day);
+    return `${days} ${days === 1 ? "day" : "days"} ago`;
+  }
 
   return new Date(value).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+function messageTime(value?: string) {
+  if (!value) return "";
+
+  return new Date(value).toLocaleTimeString(undefined, {
+    hour: "numeric",
+    minute: "2-digit"
+  });
+}
+
+function truncateTitle(title: string) {
+  return title.length > 30 ? `${title.slice(0, 30)}...` : title;
 }
 
 function toHistory(messages: Message[]): ChatHistoryItem[] {
@@ -82,6 +107,7 @@ export default function Chat() {
   const [currentConvId, setCurrentConvId] = useState<string | null>(null);
   const [userKeys, setUserKeys] = useState<UserKeys | null>(null);
   const [statusMessage, setStatusMessage] = useState("");
+  const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const hasKeys = useMemo(() => hasAiProviderKey(userKeys), [userKeys]);
@@ -163,12 +189,13 @@ export default function Chat() {
 
       const loadedMessages: Message[] = [];
       res.documents.forEach(doc => {
-        loadedMessages.push({ id: `${doc.$id}_u`, text: doc.message || "", isUser: true });
+        loadedMessages.push({ id: `${doc.$id}_u`, text: doc.message || "", isUser: true, timestamp: doc.timestamp || doc.$createdAt });
         loadedMessages.push({
           id: `${doc.$id}_a`,
           text: doc.response || "",
           isUser: false,
-          aiUsed: doc.aiUsed || "none"
+          aiUsed: doc.aiUsed || "none",
+          timestamp: doc.timestamp || doc.$createdAt
         });
       });
 
@@ -197,6 +224,16 @@ export default function Chat() {
     }
   }
 
+  async function copyMessage(message: Message) {
+    try {
+      await navigator.clipboard.writeText(message.text);
+      setCopiedMessageId(message.id);
+      window.setTimeout(() => setCopiedMessageId(null), 1800);
+    } catch {
+      setStatusMessage("Unable to copy that message.");
+    }
+  }
+
   async function sendMessage() {
     if (!user || !input.trim() || loading || remainingCharacters < 0) return;
 
@@ -207,10 +244,12 @@ export default function Chat() {
 
     const userMessage = input.trim();
     const history = toHistory(messages);
+    const sentAt = new Date().toISOString();
     const optimisticUserMessage: Message = {
       id: `local_${Date.now()}`,
       text: userMessage,
-      isUser: true
+      isUser: true,
+      timestamp: sentAt
     };
 
     setInput("");
@@ -225,7 +264,8 @@ export default function Chat() {
         text: aiResponse.text,
         isUser: false,
         aiUsed: aiResponse.aiUsed,
-        webSearchUsed: aiResponse.webSearchUsed
+        webSearchUsed: aiResponse.webSearchUsed,
+        timestamp: new Date().toISOString()
       };
 
       setMessages(prev => [...prev, aiMessage]);
@@ -276,7 +316,8 @@ export default function Chat() {
           id: `error_${Date.now()}`,
           text: "I could answer, but saving the chat failed. Please check your connection and Appwrite permissions.",
           isUser: false,
-          aiUsed: "none"
+          aiUsed: "none",
+          timestamp: new Date().toISOString()
         }
       ]);
     } finally {
@@ -285,7 +326,7 @@ export default function Chat() {
   }
 
   return (
-    <div className="flex min-h-screen bg-gray-950 text-gray-100">
+    <div className="flex min-h-screen overflow-x-hidden bg-gray-950 text-gray-100">
       <aside className="hidden md:flex w-80 bg-gray-900 border-r border-gray-800 flex-col">
         <div className="p-4 border-b border-gray-800 flex items-center gap-3">
           <BrandLogo size="sm" />
@@ -314,17 +355,17 @@ export default function Chat() {
               onClick={() => loadConversationMessages(conv.id)}
               className={
                 "w-full text-left p-3 rounded-xl text-sm mb-1 transition " +
-                (currentConvId === conv.id ? "bg-gray-800 text-white border border-gray-700" : "text-gray-400 hover:bg-gray-800/70")
+                (currentConvId === conv.id ? "bg-blue-950/70 text-white border border-blue-700/70 shadow-sm shadow-blue-950/30" : "text-gray-400 hover:bg-gray-800/80 hover:text-gray-200")
               }
               title={conv.title}
             >
-              <span className="block truncate font-medium">{conv.title}</span>
+              <span className="block truncate font-medium">{truncateTitle(conv.title)}</span>
               <span className="text-xs text-gray-500">{relativeTime(conv.lastUpdated)}</span>
             </button>
           ))}
         </div>
 
-        <div className="p-3 border-t border-gray-800 space-y-3">
+        <div className="border-t border-gray-800 p-3 space-y-3">
           <p className="truncate text-xs text-gray-500">{user?.email}</p>
           <div className="grid grid-cols-2 gap-2">
             <Link to="/settings" className="flex items-center justify-center gap-2 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-lg py-2 text-sm transition">
@@ -378,17 +419,18 @@ export default function Chat() {
                 <div className="flex justify-center mb-5">
                   <BrandLogo size="lg" />
                 </div>
-                <h2 className="text-3xl font-bold text-white mb-3">How can I help today?</h2>
+                <h2 className="text-3xl font-bold text-white mb-3">Welcome to Kostenlos AI</h2>
                 <p className="text-gray-400 mb-6">Bring your own free API keys. Kostenlos AI keeps the same conversation alive even when it switches providers.</p>
-                <div className="grid gap-3 sm:grid-cols-3">
-                  {examplePrompts.map(prompt => (
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {examplePrompts.map(({ icon: Icon, text }) => (
                     <button
-                      key={prompt}
+                      key={text}
                       type="button"
-                      onClick={() => setInput(prompt)}
+                      onClick={() => setInput(text)}
                       className="rounded-xl border border-gray-800 bg-gray-900 p-4 text-left text-sm text-gray-300 hover:border-blue-700 hover:bg-gray-800 transition"
                     >
-                      {prompt}
+                      <Icon size={18} className="mb-3 text-blue-300" />
+                      {text}
                     </button>
                   ))}
                 </div>
@@ -399,29 +441,69 @@ export default function Chat() {
           {loadingHistory && <p className="text-center text-gray-500 text-sm">Loading conversation...</p>}
 
           {messages.map(msg => (
-            <div key={msg.id} className={"flex animate-[fadeIn_260ms_ease-out] " + (msg.isUser ? "justify-end" : "justify-start")}>
-              <div className={"max-w-[min(44rem,86vw)] rounded-2xl px-4 py-3 shadow-lg shadow-black/10 " + (msg.isUser ? "bg-blue-600 text-white" : "bg-gray-800 text-gray-100 border border-gray-700/70")}>
-                {!msg.isUser && (
-                  <div className="mb-2 flex flex-wrap gap-2">
-                    {msg.aiUsed && msg.aiUsed !== "none" && (
-                      <span className="rounded-full border border-emerald-700/60 bg-emerald-950/60 px-2 py-0.5 text-xs text-emerald-300">
-                        via {msg.aiUsed}
-                      </span>
-                    )}
-                    {msg.webSearchUsed && (
-                      <span className="rounded-full border border-blue-700/60 bg-blue-950/60 px-2 py-0.5 text-xs text-blue-200">
-                        🔍 Web search used
-                      </span>
-                    )}
-                  </div>
-                )}
-                <p className="whitespace-pre-wrap break-words leading-relaxed">{msg.text}</p>
+            <div key={msg.id} className={"flex gap-3 animate-[fadeIn_260ms_ease-out] " + (msg.isUser ? "justify-end" : "justify-start")}>
+              {!msg.isUser && (
+                <div className="mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-purple-600 text-sm font-bold text-white">
+                  K
+                </div>
+              )}
+              <div className={"max-w-[min(44rem,86vw)] " + (msg.isUser ? "items-end" : "items-start")}>
+                <div className={"rounded-2xl px-4 py-3 shadow-lg shadow-black/10 " + (msg.isUser ? "bg-blue-600 text-white rounded-br-md" : "bg-gray-800 text-gray-100 border border-gray-700/70 rounded-bl-md")}>
+                  {!msg.isUser && (
+                    <div className="mb-2 flex flex-wrap items-center gap-2">
+                      {msg.aiUsed && msg.aiUsed !== "none" && (
+                        <span className="rounded-full border border-emerald-700/60 bg-emerald-950/70 px-2 py-0.5 text-xs font-medium text-emerald-300">
+                          via {msg.aiUsed}
+                        </span>
+                      )}
+                      {msg.webSearchUsed && (
+                        <span className="rounded-full border border-blue-700/60 bg-blue-950/60 px-2 py-0.5 text-xs text-blue-200">
+                          Web search used
+                        </span>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => copyMessage(msg)}
+                        className="ml-auto inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs text-gray-400 hover:bg-gray-700 hover:text-white transition"
+                        aria-label="Copy AI response"
+                      >
+                        {copiedMessageId === msg.id ? <Check size={13} /> : <Clipboard size={13} />}
+                        {copiedMessageId === msg.id ? "Copied" : "Copy"}
+                      </button>
+                    </div>
+                  )}
+                  {msg.isUser ? (
+                    <p className="whitespace-pre-wrap break-words leading-relaxed">{msg.text}</p>
+                  ) : (
+                    <div className="markdown-body">
+                      <ReactMarkdown
+                        components={{
+                          code({ className, children, ...props }) {
+                            const inline = !className;
+                            return inline ? (
+                              <code className="rounded bg-gray-950 px-1 py-0.5 font-mono text-blue-200" {...props}>
+                                {children}
+                              </code>
+                            ) : (
+                              <code className={`${className || ""} font-mono text-sm text-gray-100`} {...props}>
+                                {children}
+                              </code>
+                            );
+                          }
+                        }}
+                      >
+                        {msg.text}
+                      </ReactMarkdown>
+                    </div>
+                  )}
+                </div>
+                <div className={"mt-1 text-xs text-gray-500 " + (msg.isUser ? "text-right" : "text-left")}>{messageTime(msg.timestamp)}</div>
               </div>
             </div>
           ))}
 
           {loading && (
-            <div className="flex justify-start animate-[fadeIn_260ms_ease-out]">
+            <div className="flex justify-center animate-[fadeIn_260ms_ease-out]">
               <div className="bg-gray-800 border border-gray-700 rounded-2xl px-4 py-3">
                 <div className="flex space-x-1">
                   <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
@@ -436,7 +518,7 @@ export default function Chat() {
         </div>
 
         <div className="p-3 sm:p-4 border-t border-gray-800 bg-gray-950">
-          <div className="rounded-2xl border border-gray-800 bg-gray-900 p-2 shadow-2xl shadow-black/20">
+          <div className="rounded-full border border-gray-800 bg-gray-900 p-2 shadow-2xl shadow-black/20">
             <div className="flex gap-2">
               <button
                 type="button"
@@ -455,10 +537,10 @@ export default function Chat() {
                     sendMessage();
                   }
                 }}
-                placeholder="Ask anything..."
+                placeholder="Ask Kostenlos AI anything..."
                 rows={1}
                 disabled={loading}
-                className="min-h-11 max-h-36 flex-1 resize-none bg-transparent text-white px-2 py-2.5 focus:outline-none disabled:opacity-60"
+                className="min-h-11 max-h-36 flex-1 resize-none bg-transparent text-white px-2 py-2.5 focus:outline-none disabled:opacity-50 disabled:text-gray-500"
               />
               <button
                 type="button"

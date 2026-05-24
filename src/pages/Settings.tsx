@@ -135,7 +135,7 @@ export default function Settings() {
   useEffect(() => {
     if (!message) return;
 
-    const timeout = window.setTimeout(() => setMessage(""), 4500);
+    const timeout = window.setTimeout(() => setMessage(""), 3000);
     return () => window.clearTimeout(timeout);
   }, [message]);
 
@@ -275,7 +275,7 @@ export default function Settings() {
         </button>
 
         <section className="mt-6 rounded-2xl border border-gray-800 bg-gray-900 p-5">
-          <h2 className="text-lg font-semibold text-white mb-2">How it works</h2>
+          <h2 className="text-lg font-semibold text-white mb-2">How auto-failover works</h2>
           <p className="text-gray-400 leading-6">
             When your Groq limit runs out, we automatically switch to Gemini, then OpenAI, then Mistral - all in the same chat without interruption.
             You always get an answer, and the last 10 messages are sent to each provider so context stays intact.

@@ -23,6 +23,10 @@ const SYSTEM_PROMPT =
 const FALLBACK_MESSAGE =
   "All your AI services are currently at their limit. Please wait a moment or add more API keys in Settings.";
 
+function shouldFailover(status: number) {
+  return status === 429 || status >= 500 || status === 401 || status === 403 || status === 400;
+}
+
 function cleanKeys(keys: UserKeys): UserKeys {
   return {
     groqKey: keys.groqKey?.trim(),
@@ -114,7 +118,7 @@ async function tryGroq(message: string, history: ChatHistoryItem[], context: str
       })
     });
 
-    if (!res.ok) return null;
+    if (!res.ok || shouldFailover(res.status)) return null;
 
     const data = await safeJson(res);
     return data?.choices?.[0]?.message?.content?.trim() || null;
@@ -141,7 +145,7 @@ async function tryGemini(message: string, history: ChatHistoryItem[], context: s
       }
     );
 
-    if (!res.ok) return null;
+    if (!res.ok || shouldFailover(res.status)) return null;
 
     const data = await safeJson(res);
     return data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || null;
@@ -166,7 +170,7 @@ async function tryOpenAI(message: string, history: ChatHistoryItem[], context: s
       })
     });
 
-    if (!res.ok) return null;
+    if (!res.ok || shouldFailover(res.status)) return null;
 
     const data = await safeJson(res);
     return data?.choices?.[0]?.message?.content?.trim() || null;
@@ -191,7 +195,7 @@ async function tryMistral(message: string, history: ChatHistoryItem[], context: 
       })
     });
 
-    if (!res.ok) return null;
+    if (!res.ok || shouldFailover(res.status)) return null;
 
     const data = await safeJson(res);
     return data?.choices?.[0]?.message?.content?.trim() || null;
@@ -253,5 +257,9 @@ export async function getAIResponse(message: string, keys: UserKeys, history: Ch
     // In local CRA dev without Cloudflare Pages Functions, fall back to browser calls.
   }
 
-  return getBrowserAIResponse(message, keys, safeHistory);
+  try {
+    return await getBrowserAIResponse(message, keys, safeHistory);
+  } catch {
+    return { text: FALLBACK_MESSAGE, aiUsed: "none", webSearchUsed: false };
+  }
 }

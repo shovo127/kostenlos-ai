@@ -10,12 +10,14 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
+  const [successMessage, setSuccessMessage] = useState("");
   const [loading, setLoading] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
     setError("");
+    setSuccessMessage("");
     try {
       if (isSignUp) {
         await signUp(email, password, name);
@@ -27,7 +29,7 @@ export default function Login() {
       if (isSignUp) {
         setError("");
         setLoading(false);
-        alert("Account created! Please check your email to verify your account, then sign in.");
+        setSuccessMessage("Check your email to verify your account");
         setIsSignUp(false);
         return;
       }
@@ -40,7 +42,7 @@ export default function Login() {
 
   return (
     <div className="min-h-screen bg-gray-950 flex items-center justify-center p-4">
-      <div className="bg-gray-900 rounded-2xl p-8 w-full max-w-md border border-gray-800 shadow-2xl">
+      <div className="bg-gray-900 rounded-2xl p-8 w-full max-w-md border border-gray-800 shadow-2xl animate-[fadeIn_420ms_ease-out]">
         <div className="text-center mb-8">
           <div className="w-16 h-16 mx-auto mb-4">
             <svg width="64" height="64" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -122,6 +124,12 @@ export default function Login() {
             </div>
           )}
 
+          {successMessage && (
+            <div className="bg-emerald-950 border border-emerald-800 rounded-xl px-4 py-3">
+              <p className="text-emerald-300 text-sm">{successMessage}</p>
+            </div>
+          )}
+
           <button
             type="submit"
             disabled={loading}
@@ -142,7 +150,7 @@ export default function Login() {
         <p className="text-center text-gray-400 mt-4 text-sm">
           {isSignUp ? "Already have an account?" : "Don t have an account?"}
           <button
-            onClick={() => { setIsSignUp(!isSignUp); setError(""); }}
+            onClick={() => { setIsSignUp(!isSignUp); setError(""); setSuccessMessage(""); }}
             className="text-blue-400 ml-1 hover:underline"
           >
             {isSignUp ? "Sign In" : "Sign Up"}
